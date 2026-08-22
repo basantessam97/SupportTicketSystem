@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using SupportTicketSystem.Application.Abstractions.Repositories;
 using SupportTicketSystem.Domain.Entities;
 using SupportTicketSystem.Infrastructure.Identity;
 using SupportTicketSystem.Infrastructure.Persistence;
+using SupportTicketSystem.Infrastructure.Persistence.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +18,13 @@ builder.Services
     .AddDefaultTokenProviders();
 
 builder.Services.AddScoped<IIdentitySeeder, IdentitySeeder>();
+
+builder.Services.AddScoped(
+    typeof(IRepository<>),
+    typeof(GenericRepository<>));
+
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

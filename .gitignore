@@ -1,0 +1,16 @@
+.vs/
+.nuget/
+
+[Bb]in/
+[Oo]bj/
+
+*.user
+*.suo
+*.rsuser
+
+TestResults/
+.idea/
+
+appsettings.Development.json
+
+*.log

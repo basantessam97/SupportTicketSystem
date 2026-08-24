@@ -36,6 +36,36 @@ public class GenericRepository<T>(
         return await query.ToListAsync(cancellationToken);
     }
 
+    public async Task<(IReadOnlyList<T> Items, int TotalCount)> GetPagedAsync(
+    Expression<Func<T, bool>>? predicate = null,
+    Expression<Func<T, object>>? orderBy = null,
+    bool descending = true,
+    int pageNumber = 1,
+    int pageSize = 10,
+    CancellationToken cancellationToken = default)
+    {
+        IQueryable<T> query = DbSet.AsNoTracking();
+
+        if (predicate is not null)
+            query = query.Where(predicate);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        if (orderBy is not null)
+        {
+            query = descending
+                ? query.OrderByDescending(orderBy)
+                : query.OrderBy(orderBy);
+        }
+
+        var items = await query
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return (items, totalCount);
+    }
+
     public async Task<bool> AnyAsync(
         Expression<Func<T, bool>> predicate,
         CancellationToken cancellationToken = default)

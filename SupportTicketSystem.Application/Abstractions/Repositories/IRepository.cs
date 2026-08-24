@@ -21,6 +21,14 @@ public interface IRepository<T>
         Expression<Func<T, bool>>? predicate = null,
         CancellationToken cancellationToken = default);
 
+    Task<(IReadOnlyList<T> Items, int TotalCount)> GetPagedAsync(
+        Expression<Func<T, bool>>? predicate = null,
+        Expression<Func<T, object>>? orderBy = null,
+        bool descending = true,
+        int pageNumber = 1,
+        int pageSize = 10,
+        CancellationToken cancellationToken = default);
+
     Task AddAsync(
         T entity,
         CancellationToken cancellationToken = default);

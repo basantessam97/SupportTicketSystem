@@ -13,6 +13,28 @@ namespace SupportTicketSystem.API.Controllers;
 
 public class TicketsController(ITicketService _ticketService) : ControllerBase
 {
+    [Authorize]
+    [HttpGet("grid")]
+    public async Task<IActionResult> GetGrid(
+    [FromQuery] TicketGridRequest request,
+    CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId();
+
+        if (userId is null)
+            return Unauthorized();
+
+        var result = await _ticketService.GetGridAsync(
+            request,
+            userId,
+            cancellationToken);
+
+        if (result.result == TicketActionResult.Unauthorized)
+            return Forbid();
+
+        return Ok(result.data);
+    }
+
     [HttpPost, Authorize]
     public async Task<IActionResult> Create(
     [FromBody] CreateTicketRequest request,
@@ -262,6 +284,13 @@ public class TicketsController(ITicketService _ticketService) : ControllerBase
     public IActionResult GetPriorities()
     {
         return Ok(_ticketService.GetPriorities());
+    }
+
+    [Authorize]
+    [HttpGet("statuses")]
+    public IActionResult GetStatuses()
+    {
+        return Ok(_ticketService.GetStatuses());
     }
 
     [Authorize(Roles = "Admin")]

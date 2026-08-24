@@ -58,6 +58,8 @@ public interface ITicketService
 
     IReadOnlyList<LookupResponse> GetPriorities();
 
+    IReadOnlyList<LookupResponse> GetStatuses();
+
     IReadOnlyList<AgentResponse> GetAgentsAsync();
 
     Task<(TicketActionResult result, CommentResponse? data)> AddCommentAsync(
@@ -69,6 +71,11 @@ public interface ITicketService
     Task<(TicketActionResult result, TimeEntryResponse? data)> LogTimeAsync(
     int ticketId,
     LogTimeRequest request,
+    string userId,
+    CancellationToken cancellationToken = default);
+
+    Task<(TicketActionResult result, TicketGridResponse? data)> GetGridAsync(
+    TicketGridRequest request,
     string userId,
     CancellationToken cancellationToken = default);
 }

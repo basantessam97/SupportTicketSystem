@@ -1,9 +1,12 @@
 ﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 using SupportTicketSystem.Application.Abstractions.Repositories;
 using SupportTicketSystem.Application.Abstractions.Services;
 using SupportTicketSystem.Application.DTOs.Tickets;
 using SupportTicketSystem.Domain.Entities;
 using SupportTicketSystem.Domain.Enums;
+using System.Linq.Expressions;
+using System.Net.NetworkInformation;
 
 namespace SupportTicketSystem.Application.Features.Tickets;
 
@@ -527,6 +530,17 @@ public class TicketService(
             .ToList();
     }
 
+    public IReadOnlyList<LookupResponse> GetStatuses()
+    {
+        return Enum.GetValues<TicketStatus>()
+            .Select(x => new LookupResponse
+            {
+                Id = (int)x,
+                Name = x.ToString()
+            })
+            .ToList();
+    }
+
     public IReadOnlyList<AgentResponse> GetAgentsAsync()
     {
         return _userManager.Users
@@ -664,6 +678,108 @@ public class TicketService(
 
             UserName = user.FullName
         });
+    }
+
+    public async Task<(TicketActionResult result, TicketGridResponse? data)> GetGridAsync(
+    TicketGridRequest request,
+    string userId,
+    CancellationToken cancellationToken = default)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+
+        if (user is null || !user.IsActive)
+            return (TicketActionResult.Unauthorized, null);
+
+
+        // validate pagination
+        if (request.PageNumber < 1)
+            request.PageNumber = 1;
+
+        if (request.PageSize < 1)
+            request.PageSize = 10;
+
+        if (request.PageSize > 100)
+            request.PageSize = 100;
+
+
+        // search
+        string search = string.Empty;
+
+        if (!string.IsNullOrEmpty(request.Search))
+            search = request.Search.Trim();
+
+
+        // filteration
+        Expression<Func<Ticket, bool>> predicate = x =>
+        (x.IsActive) &&
+        (user.UserType == UserType.Admin ||
+            (user.UserType == UserType.Customer && x.CustomerId == user.Id) ||
+            (user.UserType == UserType.SupportAgent && x.AssignedAgentId == user.Id)) &&
+        (string.IsNullOrWhiteSpace(search) ||
+            x.TicketNumber.Contains(search) ||
+            x.Title.Contains(search) ||
+            x.Description.Contains(search)) &&
+        (request.Status == 0 ||
+            x.Status == (TicketStatus)request.Status) &&
+        (request.Priority == 0 ||
+            x.Priority == (TicketPriority)request.Priority) &&
+        (string.IsNullOrEmpty(request.AgentId) ||
+             user.UserType != UserType.Admin ||
+             x.AssignedAgentId == request.AgentId);
+
+
+        // sorting
+        Expression<Func<Ticket, object>> orderBy =
+            request.SortBy?.ToLower() switch
+            {
+                "ticketnumber" => x => x.TicketNumber,
+                "title" => x => x.Title,
+                "status" => x => x.Status,
+                "priority" => x => x.Priority,
+                "customer" => x => x.Customer.FullName,
+                "agent" => x => x.AssignedAgent != null ? x.AssignedAgent.FullName : string.Empty,
+                _ => x => x.CreatedOn
+            };
+
+        // get data
+        var result = await _unitOfWork
+            .Repository<Ticket>()
+            .GetPagedAsync(
+                predicate,
+                orderBy,
+                request.SortDescending,
+                request.PageNumber,
+                request.PageSize,
+                cancellationToken);
+
+        // generate dto list
+        var items = result.Items
+            .Select(x => new TicketGridItemResponse
+            {
+                Id = x.Id,
+                TicketNumber = x.TicketNumber,
+                Title = x.Title,
+                Status = x.Status.ToString(),
+                Priority = x.Priority.ToString(),
+                CustomerName = x.Customer.FullName,
+                AssignedAgentName = x.AssignedAgent?.FullName,
+                CreatedOn = x.CreatedOn,
+                ResolvedOn = x.ResolvedOn,
+                ClosedOn = x.ClosedOn
+            })
+            .ToList();
+
+        return (
+            TicketActionResult.Success,
+            new TicketGridResponse
+            {
+                Items = items,
+                PageNumber = request.PageNumber,
+                PageSize = request.PageSize,
+                TotalCount = result.TotalCount,
+                TotalPages = (int)Math.Ceiling(
+                    result.TotalCount / (double)request.PageSize)
+            });
     }
 
     private static string GenerateTicketNumber()

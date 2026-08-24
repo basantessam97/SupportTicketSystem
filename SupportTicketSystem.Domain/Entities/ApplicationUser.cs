@@ -11,7 +11,7 @@ public class ApplicationUser : IdentityUser
 
     public UserType UserType { get; set; }
 
-    public bool IsActive { get; set; }
+    public bool IsActive { get; set; } = true;
 
     public DateTime CreatedOn { get; set; }
 

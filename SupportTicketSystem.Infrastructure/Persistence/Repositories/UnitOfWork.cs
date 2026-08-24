@@ -1,4 +1,5 @@
 ﻿using SupportTicketSystem.Application.Abstractions.Repositories;
+using System.Transactions;
 
 namespace SupportTicketSystem.Infrastructure.Persistence.Repositories;
 
@@ -47,6 +48,27 @@ public class UnitOfWork(
         {
             await transaction.RollbackAsync(cancellationToken);
 
+            throw;
+        }
+    }
+
+    public async Task<bool> ExecuteInTransactionAllContextAsync(
+    Func<Task<bool>> action)
+    {
+        try
+        {
+            using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
+            {
+                var result = await action();
+
+                if (result)
+                    scope.Complete();
+
+                return result;
+            }
+        }
+        catch
+        {
             throw;
         }
     }

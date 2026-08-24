@@ -285,7 +285,7 @@ public class TicketService(
 
                     CreatedOn = DateTime.Now,
 
-                    CreatedBy = user.Id,
+                    CreatedBy = user.Id, 
                 };
 
                 await _unitOfWork

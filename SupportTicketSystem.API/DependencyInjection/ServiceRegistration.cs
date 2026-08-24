@@ -2,6 +2,7 @@
 using SupportTicketSystem.Application.Abstractions.Services;
 using SupportTicketSystem.Application.Features.Dashboard;
 using SupportTicketSystem.Application.Features.Tickets;
+using SupportTicketSystem.Application.Features.Users;
 using SupportTicketSystem.Infrastructure.Identity;
 using SupportTicketSystem.Infrastructure.Persistence.Repositories;
 
@@ -39,6 +40,9 @@ public static class ServiceRegistration
 
         // Tickets Dashboard
         services.AddScoped<ITicketDashboardService, TicketDashboardService>();
+
+        // Users Management
+        services.AddScoped<IUserService, UserService>();
 
         return services;
     }

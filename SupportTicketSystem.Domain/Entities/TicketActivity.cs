@@ -19,9 +19,9 @@ public class TicketActivity : BaseEntity
 
     public int? CommentId { get; set; }
 
-    public Ticket Ticket { get; set; } = null!;
+    public virtual Ticket Ticket { get; set; } = null!;
 
-    public ApplicationUser User { get; set; } = null!;
+    public virtual ApplicationUser User { get; set; } = null!;
 
-    public Comment? Comment { get; set; }
+    public virtual Comment? Comment { get; set; }
 }

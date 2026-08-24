@@ -26,16 +26,17 @@ public class Ticket : BaseEntity
 
     // Navigation Properties
 
-    public ApplicationUser Customer { get; set; } = null!;
 
-    public ApplicationUser? AssignedAgent { get; set; }
+    public virtual ApplicationUser Customer { get; set; } = null!;
 
-    public ICollection<Comment> Comments { get; set; }
+    public virtual ApplicationUser? AssignedAgent { get; set; }
+
+    public virtual ICollection<Comment> Comments { get; set; }
         = new List<Comment>();
 
-    public ICollection<TicketActivity> Activities { get; set; }
+    public virtual ICollection<TicketActivity> Activities { get; set; }
         = new List<TicketActivity>();
 
-    public ICollection<TimeEntry> TimeEntries { get; set; }
+    public virtual ICollection<TimeEntry> TimeEntries { get; set; }
         = new List<TimeEntry>();
 }

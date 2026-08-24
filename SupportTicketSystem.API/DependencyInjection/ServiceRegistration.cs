@@ -1,5 +1,6 @@
 ﻿using SupportTicketSystem.Application.Abstractions.Repositories;
 using SupportTicketSystem.Application.Abstractions.Services;
+using SupportTicketSystem.Application.Features.Tickets;
 using SupportTicketSystem.Infrastructure.Identity;
 using SupportTicketSystem.Infrastructure.Persistence.Repositories;
 
@@ -28,6 +29,9 @@ public static class ServiceRegistration
 
         // Identity Seeder
         services.AddScoped<IIdentitySeeder, IdentitySeeder>();
+
+        // Tickets
+        services.AddScoped<ITicketService, TicketService>();
 
         return services;
     }

@@ -2,15 +2,16 @@
 
 namespace SupportTicketSystem.Application.Abstractions.Repositories;
 
-public interface IRepository<T> where T : class
+public interface IRepository<T>
+    where T : class
 {
     Task<T?> GetByIdAsync(
         int id,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<T>> GetAllAsync(
-    Expression<Func<T, bool>>? predicate = null,
-    CancellationToken cancellationToken = default);
+        Expression<Func<T, bool>>? predicate = null,
+        CancellationToken cancellationToken = default);
 
     Task<bool> AnyAsync(
         Expression<Func<T, bool>> predicate,

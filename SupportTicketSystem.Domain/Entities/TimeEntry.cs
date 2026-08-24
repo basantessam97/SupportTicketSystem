@@ -15,7 +15,7 @@ public class TimeEntry : BaseEntity
     public string? Description { get; set; }
 
 
-    public Ticket Ticket { get; set; } = null!;
+    public virtual Ticket Ticket { get; set; } = null!;
 
-    public ApplicationUser User { get; set; } = null!;
+    public virtual ApplicationUser User { get; set; } = null!;
 }

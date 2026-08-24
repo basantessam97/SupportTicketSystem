@@ -20,18 +20,18 @@ public class ApplicationUser : IdentityUser
 
     // Navigation Properties
 
-    public ICollection<Ticket> CreatedTickets { get; set; }
+    public virtual ICollection<Ticket> CreatedTickets { get; set; }
         = new List<Ticket>();
 
-    public ICollection<Ticket> AssignedTickets { get; set; }
+    public virtual ICollection<Ticket> AssignedTickets { get; set; }
         = new List<Ticket>();
 
-    public ICollection<Comment> Comments { get; set; }
+    public virtual ICollection<Comment> Comments { get; set; }
         = new List<Comment>();
 
-    public ICollection<TicketActivity> Activities { get; set; }
+    public virtual ICollection<TicketActivity> Activities { get; set; }
         = new List<TicketActivity>();
 
-    public ICollection<TimeEntry> TimeEntries { get; set; }
+    public virtual ICollection<TimeEntry> TimeEntries { get; set; }
         = new List<TimeEntry>();
 }

@@ -8,13 +8,12 @@ public class Comment : BaseEntity
 
     public string UserId { get; set; } = null!;
 
-
     public string Content { get; set; } = null!;
 
 
     // Navigation Properties
 
-    public Ticket Ticket { get; set; } = null!;
+    public virtual Ticket Ticket { get; set; } = null!;
 
-    public ApplicationUser User { get; set; } = null!;
+    public virtual ApplicationUser User { get; set; } = null!;
 }

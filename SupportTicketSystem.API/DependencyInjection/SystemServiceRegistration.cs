@@ -19,7 +19,7 @@ public static class SystemServiceRegistration
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(
                 configuration.GetConnectionString(
-                    "DefaultConnection")));
+                    "DefaultConnection")).UseLazyLoadingProxies());
 
         // Identity
         services

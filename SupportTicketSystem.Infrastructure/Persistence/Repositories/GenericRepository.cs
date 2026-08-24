@@ -1,7 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using System.Linq.Expressions;
 using SupportTicketSystem.Application.Abstractions.Repositories;
 using SupportTicketSystem.Infrastructure.Persistence;
+using System.Linq.Expressions;
 
 namespace SupportTicketSystem.Infrastructure.Persistence.Repositories;
 
@@ -21,9 +21,10 @@ public class GenericRepository<T>(
             cancellationToken);
     }
 
+
     public async Task<IReadOnlyList<T>> GetAllAsync(
-    Expression<Func<T, bool>>? predicate = null,
-    CancellationToken cancellationToken = default)
+        Expression<Func<T, bool>>? predicate = null,
+        CancellationToken cancellationToken = default)
     {
         IQueryable<T> query = DbSet.AsNoTracking();
 
@@ -50,14 +51,18 @@ public class GenericRepository<T>(
     {
         return predicate is null
             ? await DbSet.CountAsync(cancellationToken)
-            : await DbSet.CountAsync(predicate, cancellationToken);
+            : await DbSet.CountAsync(
+                predicate,
+                cancellationToken);
     }
 
     public async Task AddAsync(
         T entity,
         CancellationToken cancellationToken = default)
     {
-        await DbSet.AddAsync(entity, cancellationToken);
+        await DbSet.AddAsync(
+            entity,
+            cancellationToken);
     }
 
     public void Update(T entity)

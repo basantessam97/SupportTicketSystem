@@ -1,4 +1,5 @@
-﻿using SupportTicketSystem.Infrastructure.Identity;
+﻿using SupportTicketSystem.API.Middleware;
+using SupportTicketSystem.Infrastructure.Identity;
 
 namespace SupportTicketSystem.API.DependencyInjection;
 
@@ -14,6 +15,8 @@ public static class MiddlewareRegistration
         }
 
         app.UseHttpsRedirection();
+
+        app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
 
         app.UseAuthentication();
 

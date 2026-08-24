@@ -17,25 +17,25 @@ public class TicketsController(ITicketService _ticketService) : ControllerBase
     [HttpGet("grid")]
     public async Task<IActionResult> GetGrid(
     [FromQuery] TicketGridRequest request,
-    CancellationToken cancellationToken)
-    {
-        var userId = User.GetUserId();
+        CancellationToken cancellationToken)
+        {
+            var userId = User.GetUserId();
 
-        if (userId is null)
-            return Unauthorized();
+            if (userId is null)
+                return Unauthorized();
 
-        var result = await _ticketService.GetGridAsync(
-            request,
-            userId,
-            cancellationToken);
+            var result = await _ticketService.GetGridAsync(
+                request,
+                userId,
+                cancellationToken);
 
-        if (result.result == TicketActionResult.Unauthorized)
-            return Forbid();
+            if (result.result == TicketActionResult.Unauthorized)
+                return Forbid();
 
-        return Ok(result.data);
-    }
+            return Ok(result.data);
+        }
 
-    [HttpPost, Authorize]
+    [HttpPost("create-ticket"), Authorize]
     public async Task<IActionResult> Create(
     [FromBody] CreateTicketRequest request,
     CancellationToken cancellationToken)
@@ -59,7 +59,7 @@ public class TicketsController(ITicketService _ticketService) : ControllerBase
     }
 
     [Authorize]
-    [HttpGet("{id:int}")]
+    [HttpGet("{id:int}/ticket")]
     public async Task<IActionResult> GetById(
     int id,
     CancellationToken cancellationToken)
@@ -81,6 +81,66 @@ public class TicketsController(ITicketService _ticketService) : ControllerBase
             return NotFound();
 
         return Ok(result.data);
+    }
+
+    [Authorize]
+    [HttpPost("{id:int}/add-comment")]
+    public async Task<IActionResult> AddComment(
+    int id,
+    [FromBody] AddCommentRequest request,
+    CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirstValue(
+            ClaimTypes.NameIdentifier);
+
+        if (userId is null)
+            return Unauthorized();
+
+        var result = await _ticketService.AddCommentAsync(
+            id,
+            request,
+            userId,
+            cancellationToken);
+
+        if (result.result == TicketActionResult.Unauthorized)
+            return Forbid();
+
+        if (result.result == TicketActionResult.NotFound)
+            return NotFound();
+
+        return StatusCode(
+            StatusCodes.Status201Created,
+            result.data);
+    }
+
+    [Authorize(Roles = "SupportAgent")]
+    [HttpPost("{id:int}/add-time-entries")]
+    public async Task<IActionResult> LogTime(
+    int id,
+    [FromBody] LogTimeRequest request,
+    CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirstValue(
+            ClaimTypes.NameIdentifier);
+
+        if (userId is null)
+            return Unauthorized();
+
+        var result = await _ticketService.LogTimeAsync(
+            id,
+            request,
+            userId,
+            cancellationToken);
+
+        if (result.result == TicketActionResult.Unauthorized)
+            return Forbid();
+
+        if (result.result == TicketActionResult.NotFound)
+            return NotFound();
+
+        return StatusCode(
+            StatusCodes.Status201Created,
+            result.data);
     }
 
     [Authorize]
@@ -167,7 +227,7 @@ public class TicketsController(ITicketService _ticketService) : ControllerBase
     }
 
     [Authorize(Roles = "Admin")]
-    [HttpPatch("{id:int}/active")]
+    [HttpPatch("{id:int}/change-activation")]
     public async Task<IActionResult> ChangeActivation(
     int id,
     CancellationToken cancellationToken)
@@ -192,7 +252,7 @@ public class TicketsController(ITicketService _ticketService) : ControllerBase
     }
 
     [Authorize(Roles = "Admin")]
-    [HttpPatch("{id:int}/priority")]
+    [HttpPatch("{id:int}/change-priority")]
     public async Task<IActionResult> ChangePriority(
     int id,
     int priority,
@@ -222,7 +282,7 @@ public class TicketsController(ITicketService _ticketService) : ControllerBase
     }
 
     [Authorize(Roles = "Customer,SupportAgent")]
-    [HttpPatch("{id:int}/status")]
+    [HttpPatch("{id:int}/change-status")]
     public async Task<IActionResult> ChangeStatus(
     int id,
     CancellationToken cancellationToken)
@@ -279,7 +339,7 @@ public class TicketsController(ITicketService _ticketService) : ControllerBase
         return NoContent();
     }
 
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin, SupportAgent")]
     [HttpGet("priorities")]
     public IActionResult GetPriorities()
     {
@@ -301,63 +361,4 @@ public class TicketsController(ITicketService _ticketService) : ControllerBase
         return Ok(_ticketService.GetAgentsAsync());
     }
 
-    [Authorize]
-    [HttpPost("{id:int}/comments")]
-    public async Task<IActionResult> AddComment(
-    int id,
-    [FromBody] AddCommentRequest request,
-    CancellationToken cancellationToken)
-    {
-        var userId = User.FindFirstValue(
-            ClaimTypes.NameIdentifier);
-
-        if (userId is null)
-            return Unauthorized();
-
-        var result = await _ticketService.AddCommentAsync(
-            id,
-            request,
-            userId,
-            cancellationToken);
-
-        if (result.result == TicketActionResult.Unauthorized)
-            return Forbid();
-
-        if (result.result == TicketActionResult.NotFound)
-            return NotFound();
-
-        return StatusCode(
-            StatusCodes.Status201Created,
-            result.data);
-    }
-
-    [Authorize(Roles = "SupportAgent")]
-    [HttpPost("{id:int}/time-entries")]
-    public async Task<IActionResult> LogTime(
-    int id,
-    [FromBody] LogTimeRequest request,
-    CancellationToken cancellationToken)
-    {
-        var userId = User.FindFirstValue(
-            ClaimTypes.NameIdentifier);
-
-        if (userId is null)
-            return Unauthorized();
-
-        var result = await _ticketService.LogTimeAsync(
-            id,
-            request,
-            userId,
-            cancellationToken);
-
-        if (result.result == TicketActionResult.Unauthorized)
-            return Forbid();
-
-        if (result.result == TicketActionResult.NotFound)
-            return NotFound();
-
-        return StatusCode(
-            StatusCodes.Status201Created,
-            result.data);
-    }
 }

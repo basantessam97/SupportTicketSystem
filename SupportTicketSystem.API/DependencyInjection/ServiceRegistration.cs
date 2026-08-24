@@ -1,5 +1,6 @@
 ﻿using SupportTicketSystem.Application.Abstractions.Repositories;
 using SupportTicketSystem.Application.Abstractions.Services;
+using SupportTicketSystem.Application.Features.Dashboard;
 using SupportTicketSystem.Application.Features.Tickets;
 using SupportTicketSystem.Infrastructure.Identity;
 using SupportTicketSystem.Infrastructure.Persistence.Repositories;
@@ -17,6 +18,9 @@ public static class ServiceRegistration
             typeof(IRepository<>),
             typeof(GenericRepository<>));
 
+        // User Repository
+        services.AddScoped<IUserRepository, UserRepository>();
+
         // Unit Of Work
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
@@ -32,6 +36,9 @@ public static class ServiceRegistration
 
         // Tickets
         services.AddScoped<ITicketService, TicketService>();
+
+        // Tickets Dashboard
+        services.AddScoped<ITicketDashboardService, TicketDashboardService>();
 
         return services;
     }

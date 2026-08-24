@@ -12,4 +12,10 @@ public class TicketGridResponse
     public int TotalCount { get; set; }
 
     public int TotalPages { get; set; }
+
+    public bool IsCustomer { get; set; } 
+
+    public bool IsAgent { get; set; }
+
+    public List<string> SortingColumns { get; set; } = new List<string>();
 }

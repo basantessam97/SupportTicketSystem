@@ -15,7 +15,7 @@ public class Ticket : BaseEntity
 
     public TicketPriority Priority { get; set; }
 
-    public string CustomerId { get; set; }
+    public string CustomerId { get; set; } = null!;
 
     public string? AssignedAgentId { get; set; }
 

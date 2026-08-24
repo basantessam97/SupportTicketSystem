@@ -14,6 +14,111 @@ public class TicketService(
     IUnitOfWork _unitOfWork,
     UserManager<ApplicationUser> _userManager) : ITicketService
 {
+    public async Task<(TicketActionResult result, TicketGridResponse? data)> GetGridAsync(
+    TicketGridRequest request,
+    string userId,
+    CancellationToken cancellationToken = default)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+
+        if (user is null || !user.IsActive)
+            return (TicketActionResult.Unauthorized, null);
+
+
+        // validate pagination
+        if (request.PageNumber < 1)
+            request.PageNumber = 1;
+
+        if (request.PageSize < 1)
+            request.PageSize = 10;
+
+        if (request.PageSize > 100)
+            request.PageSize = 100;
+
+
+        // search
+        string search = string.Empty;
+
+        if (!string.IsNullOrEmpty(request.Search))
+            search = request.Search.Trim();
+
+
+        // filteration
+        Expression<Func<Ticket, bool>> predicate = x =>
+        (x.IsActive) &&
+        (user.UserType == UserType.Admin ||
+            (user.UserType == UserType.Customer && x.CustomerId == user.Id) ||
+            (user.UserType == UserType.SupportAgent && x.AssignedAgentId == user.Id)) &&
+        (string.IsNullOrWhiteSpace(search) ||
+            x.TicketNumber.Contains(search) ||
+            x.Title.Contains(search) ||
+            x.Description.Contains(search)) &&
+        (request.Status == 0 ||
+            x.Status == (TicketStatus)request.Status) &&
+        (request.Priority == 0 ||
+            x.Priority == (TicketPriority)request.Priority) &&
+        (string.IsNullOrEmpty(request.AgentId) ||
+             user.UserType != UserType.Admin ||
+             x.AssignedAgentId == request.AgentId);
+
+
+        // sorting
+        Expression<Func<Ticket, object>> orderBy =
+            request.SortBy?.ToLower() switch
+            {
+                "ticketnumber" => x => x.TicketNumber,
+                "title" => x => x.Title,
+                "status" => x => x.Status,
+                "priority" => x => x.Priority,
+                "customer" => x => x.Customer.FullName,
+                "agent" => x => x.AssignedAgent != null ? x.AssignedAgent.FullName : string.Empty,
+                _ => x => x.CreatedOn
+            };
+
+        // get data
+        var result = await _unitOfWork
+            .Repository<Ticket>()
+            .GetPagedAsync(
+                predicate,
+                orderBy,
+                request.SortDescending,
+                request.PageNumber,
+                request.PageSize,
+                cancellationToken);
+
+        // generate dto list
+        var items = result.Items
+            .Select(x => new TicketGridItemResponse
+            {
+                Id = x.Id,
+                TicketNumber = x.TicketNumber,
+                Title = x.Title,
+                Status = x.Status.ToString(),
+                Priority = x.Priority.ToString(),
+                CustomerName = x.Customer.FullName,
+                AssignedAgentName = user.UserType == UserType.Customer ? string.Empty : x.AssignedAgent?.FullName,
+                CreatedOn = x.CreatedOn,
+                ResolvedOn = x.ResolvedOn,
+                ClosedOn = x.ClosedOn
+            })
+            .ToList();
+
+        return (
+            TicketActionResult.Success,
+            new TicketGridResponse
+            {
+                Items = items,
+                PageNumber = request.PageNumber,
+                PageSize = request.PageSize,
+                TotalCount = result.TotalCount,
+                TotalPages = (int)Math.Ceiling(
+                    result.TotalCount / (double)request.PageSize),
+                IsAgent = user.UserType == UserType.SupportAgent,
+                IsCustomer = user.UserType == UserType.Customer,
+                SortingColumns = { "ticketnumber", "title", "status", "priority", "customer", "agent" }
+            });
+    }
+
     public async Task<(TicketActionResult result, CustomerTicketResponse? data)> CreateAsync(
     CreateTicketRequest request,
     string customerId,
@@ -114,7 +219,7 @@ public class TicketService(
             .Repository<Ticket>()
             .GetByIdAsync(ticketId, cancellationToken);
 
-        if (ticket is null || !ticket.IsActive)
+        if (ticket is null)
             return (TicketActionResult.NotFound, null);
 
         if (!CanAccessTicket(ticket, user))
@@ -143,6 +248,188 @@ public class TicketService(
         });
     }
 
+    public async Task<(TicketActionResult result, CommentResponse? data)> AddCommentAsync(
+    int ticketId,
+    AddCommentRequest request,
+    string userId,
+    CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Content))
+            throw new ArgumentException("Comment content is required.");
+
+        var user = await _userManager.FindByIdAsync(userId);
+
+        if (user is null || !user.IsActive)
+            return (TicketActionResult.Unauthorized, null);
+
+
+        var ticket = await GetTicketById(ticketId, _unitOfWork, cancellationToken);
+
+        if (ticket is null || !ticket.IsActive)
+            return (TicketActionResult.NotFound, null);
+
+        if (!CanAccessTicket(ticket, user))
+            return (TicketActionResult.Unauthorized, null);
+
+
+        return await _unitOfWork.ExecuteInTransactionAsync(
+            async () =>
+            {
+                var comment = new Comment
+                {
+                    TicketId = ticket.Id,
+
+                    UserId = user.Id,
+
+                    Content = request.Content.Trim(),
+
+                    CreatedOn = DateTime.Now,
+
+                    CreatedBy = user.Id,
+                };
+
+                await _unitOfWork
+                    .Repository<Comment>()
+                    .AddAsync(comment, cancellationToken);
+
+
+                ticket.Activities.Add(new TicketActivity
+                {
+                    TicketId = ticket.Id,
+
+                    UserId = user.Id,
+
+                    ActivityType = ActivityType.CommentAdded,
+
+                    OldValue = null,
+
+                    NewValue = null,
+
+                    Description = request.Content.Trim(),
+
+                    CreatedOn = DateTime.Now,
+
+                    CreatedBy = user.Id,
+                });
+
+
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+
+                return (
+                    TicketActionResult.Success,
+                    new CommentResponse
+                    {
+                        Id = comment.Id,
+
+                        Content = comment.Content,
+
+                        UserName = user.FullName,
+
+                        UserType = user.UserType.ToString(),
+
+                        CreatedOn = comment.CreatedOn
+                    });
+            },
+            cancellationToken);
+    }
+
+    public async Task<(TicketActionResult result, TimeEntryResponse? data)> LogTimeAsync(
+    int ticketId,
+    LogTimeRequest request,
+    string userId,
+    CancellationToken cancellationToken = default)
+    {
+        if (request.DurationMinutes <= 0)
+            throw new ArgumentException(
+                "Duration must be greater than zero.");
+
+        var user = await _userManager.FindByIdAsync(userId);
+
+        if (user is null ||
+            !user.IsActive ||
+            user.UserType != UserType.SupportAgent)
+        {
+            return (TicketActionResult.Unauthorized, null);
+        }
+
+        var ticket = await GetTicketById(ticketId, _unitOfWork, cancellationToken);
+
+        if (ticket is null || !ticket.IsActive)
+            return (TicketActionResult.NotFound, null);
+
+        if (ticket.AssignedAgentId != user.Id)
+            return (TicketActionResult.Unauthorized, null);
+
+
+        return await _unitOfWork.ExecuteInTransactionAsync(
+            async () =>
+            {
+                var timeEntry = new TimeEntry
+                {
+                    TicketId = ticket.Id,
+
+                    UserId = user.Id,
+
+                    WorkDate = request.WorkDate.Date,
+
+                    DurationMinutes = request.DurationMinutes,
+
+                    Description = string.IsNullOrWhiteSpace(request.Description)
+                        ? null
+                        : request.Description.Trim(),
+
+                    CreatedOn = DateTime.Now,
+
+                    CreatedBy = user.Id,
+                };
+
+                await _unitOfWork
+                    .Repository<TimeEntry>()
+                    .AddAsync(timeEntry, cancellationToken);
+
+
+                ticket.Activities.Add(new TicketActivity
+                {
+                    TicketId = ticket.Id,
+
+                    UserId = user.Id,
+
+                    ActivityType = ActivityType.TimeLogged,
+
+                    OldValue = null,
+
+                    NewValue = timeEntry.DurationMinutes.ToString(),
+
+                    Description = $"Time logged =  {request.DurationMinutes} minutes",
+
+                    CreatedOn = DateTime.Now,
+
+                    CreatedBy = user.Id,
+                });
+
+
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+
+                return (
+                    TicketActionResult.Success,
+                    new TimeEntryResponse
+                    {
+                        Id = timeEntry.Id,
+
+                        WorkDate = timeEntry.WorkDate,
+
+                        DurationMinutes = timeEntry.DurationMinutes,
+
+                        Description = timeEntry.Description,
+
+                        UserName = user.FullName
+                    });
+            },
+            cancellationToken);
+    }
+
     public async Task<(TicketActionResult result, IReadOnlyList<TicketCommentResponse>? data)> GetCommentsAsync(
     int ticketId,
     int pageNumber,
@@ -154,6 +441,16 @@ public class TicketService(
 
         if (user is null || !user.IsActive)
             return (TicketActionResult.Unauthorized, null);
+
+        // validate pagination
+        if (pageNumber < 1)
+            pageNumber = 1;
+
+        if (pageSize < 1)
+            pageSize = 10;
+
+        if (pageSize > 100)
+            pageSize = 100;
 
         var ticket = await GetTicketById(ticketId, _unitOfWork, cancellationToken);
 
@@ -192,6 +489,16 @@ public class TicketService(
         if (user is null || !user.IsActive)
             return (TicketActionResult.Unauthorized, null);
 
+        // validate pagination
+        if (pageNumber < 1)
+            pageNumber = 1;
+
+        if (pageSize < 1)
+            pageSize = 10;
+
+        if (pageSize > 100)
+            pageSize = 100;
+
         var ticket = await GetTicketById(ticketId, _unitOfWork, cancellationToken);
 
         if (ticket is null || !ticket.IsActive)
@@ -212,7 +519,7 @@ public class TicketService(
                 ActivityType.Closed
             ]);
         }
-        else if (user.UserType == UserType.SupportAgent)
+        else 
         {
             allowedTypes.AddRange(
             [
@@ -221,7 +528,9 @@ public class TicketService(
                 ActivityType.Resolved,
                 ActivityType.Closed,
                 ActivityType.PriorityChanged,
-                ActivityType.ActivityStatusChanged
+                ActivityType.ActivityStatusChanged,
+                ActivityType.CommentAdded,
+                ActivityType.TimeLogged
             ]);
         }
 
@@ -314,7 +623,9 @@ public class TicketService(
             ActivityType = ActivityType.ActivityStatusChanged,
             OldValue = ticket.IsActive ? "Disabled" : "Enabled",
             NewValue = ticket.IsActive ? "Enabled" : "Disabled",
-            Description = "Ticket has been" + (ticket.IsActive ? "Enabled" : "Disabled"),
+            Description = "Ticket has been " + (ticket.IsActive ? "enabled" : "disabled"),
+            CreatedOn = DateTime.Now,
+            CreatedBy = user.Id,
         });
 
         _unitOfWork.Repository<Ticket>().Update(ticket);
@@ -553,233 +864,6 @@ public class TicketService(
                 Id = x.Id,
                 FullName = x.FullName,
             }).ToList();
-    }
-
-    public async Task<(TicketActionResult result, CommentResponse? data)> AddCommentAsync(
-    int ticketId,
-    AddCommentRequest request,
-    string userId,
-    CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(request.Content))
-            throw new ArgumentException("Comment content is required.");
-
-        var user = await _userManager.FindByIdAsync(userId);
-
-        if (user is null || !user.IsActive)
-            return (TicketActionResult.Unauthorized, null);
-
-
-        var ticket = await GetTicketById(ticketId, _unitOfWork, cancellationToken);
-
-        if (ticket is null || !ticket.IsActive)
-            return (TicketActionResult.NotFound, null);
-
-        if (!CanAccessTicket(ticket, user))
-            return (TicketActionResult.Unauthorized, null);
-
-
-        var comment = new Comment
-        {
-            TicketId = ticket.Id,
-
-            UserId = user.Id,
-
-            Content = request.Content.Trim(),
-
-            CreatedOn = DateTime.Now,
-
-            CreatedBy = user.Id,
-        };
-
-        await _unitOfWork
-            .Repository<Comment>()
-            .AddAsync(comment, cancellationToken);
-
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        return (TicketActionResult.Success, new CommentResponse
-        {
-            Id = comment.Id,
-
-            Content = comment.Content,
-
-            UserName = user.FullName,
-
-            UserType = user.UserType.ToString(),
-
-            CreatedOn = comment.CreatedOn
-        });
-    }
-
-    public async Task<(TicketActionResult result, TimeEntryResponse? data)> LogTimeAsync(
-    int ticketId,
-    LogTimeRequest request,
-    string userId,
-    CancellationToken cancellationToken = default)
-    {
-        if (request.DurationMinutes <= 0)
-            throw new ArgumentException(
-                "Duration must be greater than zero.");
-
-        var user = await _userManager.FindByIdAsync(userId);
-
-        if (user is null ||
-            !user.IsActive ||
-            user.UserType != UserType.SupportAgent)
-        {
-            return (TicketActionResult.Unauthorized, null);
-        }
-
-        var ticket = await GetTicketById(ticketId, _unitOfWork, cancellationToken);
-
-        if (ticket is null || !ticket.IsActive)
-            return (TicketActionResult.NotFound, null);
-
-        if (ticket.AssignedAgentId != user.Id)
-            return (TicketActionResult.Unauthorized, null);
-
-        var timeEntry = new TimeEntry
-        {
-            TicketId = ticket.Id,
-
-            UserId = user.Id,
-
-            WorkDate = request.WorkDate.Date,
-
-            DurationMinutes = request.DurationMinutes,
-
-            Description = string.IsNullOrWhiteSpace(request.Description)
-                ? null
-                : request.Description.Trim(),
-
-            CreatedOn = DateTime.Now,
-
-            CreatedBy = user.Id,
-
-            IsActive = true
-        };
-
-        await _unitOfWork
-            .Repository<TimeEntry>()
-            .AddAsync(timeEntry, cancellationToken);
-
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        return (TicketActionResult.Success, new TimeEntryResponse
-        {
-            Id = timeEntry.Id,
-
-            WorkDate = timeEntry.WorkDate,
-
-            DurationMinutes = timeEntry.DurationMinutes,
-
-            Description = timeEntry.Description,
-
-            UserName = user.FullName
-        });
-    }
-
-    public async Task<(TicketActionResult result, TicketGridResponse? data)> GetGridAsync(
-    TicketGridRequest request,
-    string userId,
-    CancellationToken cancellationToken = default)
-    {
-        var user = await _userManager.FindByIdAsync(userId);
-
-        if (user is null || !user.IsActive)
-            return (TicketActionResult.Unauthorized, null);
-
-
-        // validate pagination
-        if (request.PageNumber < 1)
-            request.PageNumber = 1;
-
-        if (request.PageSize < 1)
-            request.PageSize = 10;
-
-        if (request.PageSize > 100)
-            request.PageSize = 100;
-
-
-        // search
-        string search = string.Empty;
-
-        if (!string.IsNullOrEmpty(request.Search))
-            search = request.Search.Trim();
-
-
-        // filteration
-        Expression<Func<Ticket, bool>> predicate = x =>
-        (x.IsActive) &&
-        (user.UserType == UserType.Admin ||
-            (user.UserType == UserType.Customer && x.CustomerId == user.Id) ||
-            (user.UserType == UserType.SupportAgent && x.AssignedAgentId == user.Id)) &&
-        (string.IsNullOrWhiteSpace(search) ||
-            x.TicketNumber.Contains(search) ||
-            x.Title.Contains(search) ||
-            x.Description.Contains(search)) &&
-        (request.Status == 0 ||
-            x.Status == (TicketStatus)request.Status) &&
-        (request.Priority == 0 ||
-            x.Priority == (TicketPriority)request.Priority) &&
-        (string.IsNullOrEmpty(request.AgentId) ||
-             user.UserType != UserType.Admin ||
-             x.AssignedAgentId == request.AgentId);
-
-
-        // sorting
-        Expression<Func<Ticket, object>> orderBy =
-            request.SortBy?.ToLower() switch
-            {
-                "ticketnumber" => x => x.TicketNumber,
-                "title" => x => x.Title,
-                "status" => x => x.Status,
-                "priority" => x => x.Priority,
-                "customer" => x => x.Customer.FullName,
-                "agent" => x => x.AssignedAgent != null ? x.AssignedAgent.FullName : string.Empty,
-                _ => x => x.CreatedOn
-            };
-
-        // get data
-        var result = await _unitOfWork
-            .Repository<Ticket>()
-            .GetPagedAsync(
-                predicate,
-                orderBy,
-                request.SortDescending,
-                request.PageNumber,
-                request.PageSize,
-                cancellationToken);
-
-        // generate dto list
-        var items = result.Items
-            .Select(x => new TicketGridItemResponse
-            {
-                Id = x.Id,
-                TicketNumber = x.TicketNumber,
-                Title = x.Title,
-                Status = x.Status.ToString(),
-                Priority = x.Priority.ToString(),
-                CustomerName = x.Customer.FullName,
-                AssignedAgentName = x.AssignedAgent?.FullName,
-                CreatedOn = x.CreatedOn,
-                ResolvedOn = x.ResolvedOn,
-                ClosedOn = x.ClosedOn
-            })
-            .ToList();
-
-        return (
-            TicketActionResult.Success,
-            new TicketGridResponse
-            {
-                Items = items,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize,
-                TotalCount = result.TotalCount,
-                TotalPages = (int)Math.Ceiling(
-                    result.TotalCount / (double)request.PageSize)
-            });
     }
 
     private static string GenerateTicketNumber()
